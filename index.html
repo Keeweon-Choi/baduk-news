@@ -139,6 +139,31 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 .status.error{ border-color:#7a3b3b; background:#241618; color:#f0b8b8; text-align:left; }
 .status.error b{ color:#ffd2d2; }
 
+/* 기보 다시보기: 사이드 패널의 대국 목록 버튼 */
+.game-link{
+  display:block; width:100%; text-align:left;
+  background:var(--panel-2); color:var(--text);
+  border:1px solid var(--line); border-radius:8px;
+  padding:8px 10px; margin-bottom:8px; cursor:pointer; font-size:13px;
+}
+.game-link:hover{ border-color:var(--accent); }
+
+/* 기보 재생 창(모달): 화면 가운데에 바둑판을 띄웁니다 */
+.modal{
+  display:none; position:fixed; inset:0; z-index:50;
+  background:rgba(0,0,0,.65); align-items:center; justify-content:center; padding:16px;
+}
+.modal-box{
+  background:var(--panel); border:1px solid var(--line); border-radius:14px;
+  padding:16px; max-width:600px; width:100%; max-height:94vh; overflow:auto;
+}
+.modal-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; }
+.modal-head b{ font-size:15px; }
+#game-board{ display:flex; justify-content:center; }
+#game-slider{ width:100%; margin:12px 0 4px; }
+.game-controls{ display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
+#game-counter{ font-size:13px; color:var(--muted); min-width:64px; text-align:center; }
+
 /* 모바일(폭이 좁을 때): 2단 → 1단으로 세로로 쌓임 */
 @media (max-width: 820px){
   .layout{ grid-template-columns: 1fr; }
@@ -170,11 +195,33 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
     <div id="news"></div>
   </main>
 
-  <!-- 오른쪽: 국제기전 일정 패널 -->
+  <!-- 오른쪽: 국제기전 일정 패널 + 기보 다시보기 -->
   <aside>
     <div class="section-title">국제기전 일정</div>
     <div class="side-panel" id="events"></div>
+
+    <div class="section-title">기보 다시보기</div>
+    <div class="side-panel" id="games"></div>
   </aside>
+</div>
+
+<!-- 기보 재생 창(모달). 평소엔 숨겨져 있다가 '기보 보기'를 누르면 나타납니다. -->
+<div class="modal" id="game-modal" onclick="if(event.target===this)closeGame()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <b id="game-title"></b>
+      <button class="btn-sm" onclick="closeGame()">✕ 닫기</button>
+    </div>
+    <div id="game-board"></div>
+    <input type="range" id="game-slider" min="0" value="0" oninput="gameSeek(this.value)" />
+    <div class="game-controls">
+      <button class="btn-sm" onclick="gameGo('first')">⏮ 처음</button>
+      <button class="btn-sm" onclick="gameGo('prev')">◀ 이전</button>
+      <span id="game-counter"></span>
+      <button class="btn-sm" onclick="gameGo('next')">다음 ▶</button>
+      <button class="btn-sm" onclick="gameGo('last')">끝 ⏭</button>
+    </div>
+  </div>
 </div>
 
 
@@ -205,13 +252,14 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
    ------------------------------------------------------------------------- */
 const SOURCES = [
   // ── 검색형 피드: 이미 '바둑'으로 검색돼서 오므로 filter 불필요 ──
-  { name: "구글뉴스(바둑)",     url: "https://news.google.com/rss/search?q=바둑&hl=ko&gl=KR&ceid=KR:ko", lang: "ko" },
+  // 구글 검색어 끝의 %20when%3A30d 는 '최근 30일 기사만' 이라는 뜻입니다.
+  //   (이게 없으면 구글이 2016년 알파고 같은 오래된 기사를 줄 수 있습니다.
+  //    기간을 바꾸려면 30d를 7d(1주)·90d 등으로. %20=공백, %3A=콜론(:))
+  { name: "구글뉴스(바둑)",     url: "https://news.google.com/rss/search?q=바둑%20when%3A30d&hl=ko&gl=KR&ceid=KR:ko", lang: "ko" },
   { name: "Bing뉴스(바둑)",     url: "https://www.bing.com/news/search?q=바둑&format=rss", lang: "ko" },
-  { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
-  { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
-  // 영어는 검색어에 'when:30d'(최근 30일)를 붙여 최신 기사만 가져옵니다.
-  // (이게 없으면 구글이 2016년 알파고 같은 오래된 기사를 줄 수 있습니다.)
-  { name: "구글뉴스(Baduk/Weiqi)",  url: "https://news.google.com/rss/search?q=baduk+OR+weiqi+when%3A30d&hl=en-US&gl=US&ceid=US:en", lang: "en" },
+  { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁%20when%3A30d&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
+  { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋%20when%3A30d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
+  { name: "구글뉴스(Baduk/Weiqi)",  url: "https://news.google.com/rss/search?q=baduk%20OR%20weiqi%20when%3A30d&hl=en-US&gl=US&ceid=US:en", lang: "en" },
 
   // ── 언론사 카테고리 피드: '스포츠 전체'라서 filter:true로 바둑 기사만 추립니다 ──
   { name: "연합뉴스",           url: "https://www.yna.co.kr/rss/sports.xml", lang: "ko", filter: true },
@@ -262,6 +310,32 @@ const PLAYERS = [
 
 
 /* -------------------------------------------------------------------------
+   4) GAMES : 대시보드 안에서 '다시보기'할 대국 기보(SGF) 목록.
+   - label : 화면에 보일 대국 이름
+   - match : (선택) 기사 제목에 이 단어들 중 하나가 들어 있으면, 그 기사 카드에
+             '기보 보기' 버튼이 자동으로 붙습니다.
+             예: ["신진서","카타고"] → 신진서·카타고 관련 기사에 버튼이 생김.
+             비워두면([]) 버튼은 안 붙고, 오른쪽 '기보 다시보기' 목록에서만 열 수 있습니다.
+   - sgf   : 기보 파일(SGF)의 내용.
+             go4go.net 같은 곳에서 대국을 열어 SGF 텍스트를 통째로 복사해 붙여넣으세요.
+             형식 예: (;GM[1]SZ[19];B[pd];W[dp];B[pq]...)   ← B=흑, W=백, 대괄호 안은 좌표
+
+   ▶ 새 대국을 추가하려면 { } 블록을 복사해 붙이고 label/match/sgf만 바꾸세요.
+   ▶ 기보를 직접 구하기 어렵거나 형식이 헷갈리면, Claude Code에게
+     "이 대국 기보를 GAMES에 추가해줘"라고 부탁하면 됩니다.
+   ------------------------------------------------------------------------- */
+const GAMES = [
+  {
+    // 아래는 기능을 보여주기 위한 '예시 포석'입니다(실제 대국 아님).
+    // 실제 대국을 넣을 때는 label/match/sgf를 바꾸세요.
+    label: "예시 포석 (데모 · 실제 대국 아님)",
+    match: [],  // 예) ["신진서","카타고"] 로 바꾸면 관련 기사에 '기보 보기' 버튼이 붙습니다.
+    sgf: "(;GM[1]FF[4]SZ[19];B[pd];W[dp];B[pq];W[dc];B[qk];W[nc];B[pf];W[pb];B[qc];W[kc];B[ce];W[cg];B[ee];W[fd];B[dd];W[ec];B[fe];W[gd];B[ci];W[cn];B[bp];W[cq];B[dl];W[gp])"
+  },
+];
+
+
+/* -------------------------------------------------------------------------
    프록시 목록: 브라우저는 CORS 보안 때문에 다른 사이트 RSS를 직접 못 가져옵니다.
    그래서 아래 프록시들을 '위에서부터 순서대로' 시도해, 되는 것을 씁니다.
    - 첫 번째 "/api/rss" 는 우리가 Vercel에 올린 서버 함수라 가장 빠르고 안정적입니다.
@@ -277,7 +351,7 @@ const PROXIES = [
 
 
 /* -------------------------------------------------------------------------
-   4) 사진 미리보기 옵션 (카드에 기사 사진을 보여줄지 설정)
+   5) 사진 미리보기 옵션 (카드에 기사 사진을 보여줄지 설정)
    - SHOW_IMAGES     : true면 카드에 사진(또는 자동 썸네일)을 표시합니다.
    - FETCH_OG_IMAGE  : RSS에 사진이 없을 때, 기사 페이지에 들어가 대표사진을
                        추가로 가져올지 여부입니다.
@@ -345,6 +419,172 @@ function renderEvents(){
 }
 
 
+/* =========================================================================
+   기보(SGF) 다시보기 기능
+   - SGF: 바둑 대국을 저장하는 표준 텍스트 형식. 예) (;SZ[19];B[pd];W[dp]...)
+   - 아래 함수들이 SGF를 읽어 바둑판을 그리고, 한 수씩 앞뒤로 넘겨 보게 합니다.
+   ========================================================================= */
+
+/* 지금 열려 있는 기보의 상태를 담습니다. { size, moves, index, label } */
+let gamePlayer = null;
+
+/* SGF 문자열에서 '바둑판 크기'와 '착수 목록'을 뽑아냅니다. */
+function parseSgf(sgf){
+  const sizeMatch = sgf.match(/SZ\[(\d+)\]/);
+  const size = sizeMatch ? parseInt(sizeMatch[1], 10) : 19;   // 크기 정보가 없으면 19줄로 봅니다.
+  const moves = [];
+  // ;B[좌표] 또는 ;W[좌표] 를 순서대로 모두 찾습니다. (좌표가 비면 '패스')
+  const re = /;([BW])\[([a-z]{0,2})\]/g;
+  let m;
+  while((m = re.exec(sgf))){
+    const color = m[1];                 // "B"(흑) 또는 "W"(백)
+    const coord = m[2];                 // 예 "pd" (열=p, 행=d), 없으면 패스
+    if(coord.length === 2){
+      moves.push({ color, x: coord.charCodeAt(0) - 97, y: coord.charCodeAt(1) - 97 });
+    }else{
+      moves.push({ color, pass: true });
+    }
+  }
+  return { size, moves };
+}
+
+/* 처음부터 count번째 수까지 두었을 때의 바둑판 상태를 계산합니다. (돌 따냄 규칙 포함) */
+function buildBoard(size, moves, count){
+  const board = Array.from({ length: size }, () => Array(size).fill(null)); // 빈 판
+  const inBoard = (x, y) => x >= 0 && y >= 0 && x < size && y < size;
+  const opp = c => (c === "B" ? "W" : "B");
+
+  // (x,y) 돌이 속한 그룹의 돌 목록과 '활로(빈 이웃) 개수'를 구합니다.
+  function groupInfo(x, y){
+    const color = board[y][x];
+    const stack = [[x, y]], seen = new Set([x + "," + y]), stones = [], libs = new Set();
+    while(stack.length){
+      const [cx, cy] = stack.pop(); stones.push([cx, cy]);
+      for(const [nx, ny] of [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]]){
+        if(!inBoard(nx, ny)) continue;
+        const v = board[ny][nx];
+        if(v === null) libs.add(nx + "," + ny);                 // 빈 자리 → 활로
+        else if(v === color && !seen.has(nx + "," + ny)){        // 같은 색 → 같은 그룹
+          seen.add(nx + "," + ny); stack.push([nx, ny]);
+        }
+      }
+    }
+    return { stones, libs: libs.size };
+  }
+
+  for(let i = 0; i < count && i < moves.length; i++){
+    const mv = moves[i];
+    if(mv.pass || !inBoard(mv.x, mv.y)) continue;
+    board[mv.y][mv.x] = mv.color;
+    // 방금 둔 돌 옆의 '상대 그룹' 중 활로가 0이면 따냅니다(판에서 제거).
+    for(const [nx, ny] of [[mv.x+1,mv.y],[mv.x-1,mv.y],[mv.x,mv.y+1],[mv.x,mv.y-1]]){
+      if(inBoard(nx, ny) && board[ny][nx] === opp(mv.color)){
+        const g = groupInfo(nx, ny);
+        if(g.libs === 0) g.stones.forEach(([sx, sy]) => board[sy][sx] = null);
+      }
+    }
+    // (아주 드문 자충 방지) 내 그룹이 활로 0이 되면 제거 — 정상 기보엔 거의 없음.
+    const self = groupInfo(mv.x, mv.y);
+    if(self.libs === 0) self.stones.forEach(([sx, sy]) => board[sy][sx] = null);
+  }
+  return board;
+}
+
+/* 바둑판 상태를 SVG 그림으로 만듭니다. 마지막에 둔 돌엔 표시점을 찍습니다. */
+function renderBoardSvg(size, board, lastMove){
+  const cell = 26, pad = 22, W = pad * 2 + cell * (size - 1);
+  let s = `<svg viewBox="0 0 ${W} ${W}" width="100%" style="max-width:520px;background:#e3b96b;border-radius:8px">`;
+  // 가로·세로 격자선
+  for(let i = 0; i < size; i++){
+    const p = pad + i * cell;
+    s += `<line x1="${pad}" y1="${p}" x2="${W-pad}" y2="${p}" stroke="#5a3d1a" stroke-width="1"/>`;
+    s += `<line x1="${p}" y1="${pad}" x2="${p}" y2="${W-pad}" stroke="#5a3d1a" stroke-width="1"/>`;
+  }
+  // 화점(19줄 기준 9개)
+  if(size === 19){
+    for(const gx of [3,9,15]) for(const gy of [3,9,15])
+      s += `<circle cx="${pad+gx*cell}" cy="${pad+gy*cell}" r="3" fill="#5a3d1a"/>`;
+  }
+  // 돌 그리기
+  for(let y = 0; y < size; y++) for(let x = 0; x < size; x++){
+    const v = board[y][x]; if(!v) continue;
+    const cx = pad + x * cell, cy = pad + y * cell;
+    s += `<circle cx="${cx}" cy="${cy}" r="${cell*0.46}" fill="${v==='B'?'#111':'#fff'}" stroke="${v==='B'?'#000':'#999'}"/>`;
+    if(lastMove && lastMove.x === x && lastMove.y === y)   // 방금 둔 자리 표시
+      s += `<circle cx="${cx}" cy="${cy}" r="4" fill="${v==='B'?'#f44':'#d00'}"/>`;
+  }
+  return s + `</svg>`;
+}
+
+/* '기보 보기'를 눌렀을 때: 해당 대국을 읽어 재생 창을 엽니다. */
+function openGame(gameIndex){
+  const game = GAMES[gameIndex];
+  const parsed = parseSgf(game.sgf);
+  // 처음엔 대국이 끝난 '최종 국면'을 보여줍니다. (이전 버튼으로 되감기 가능)
+  gamePlayer = { size: parsed.size, moves: parsed.moves, index: parsed.moves.length, label: game.label };
+  document.getElementById("game-modal").style.display = "flex";
+  drawGame();
+}
+
+/* 현재 상태(index수까지)를 바둑판에 다시 그립니다. */
+function drawGame(){
+  const gp = gamePlayer; if(!gp) return;
+  const board = buildBoard(gp.size, gp.moves, gp.index);
+  const last = (gp.index > 0 && !gp.moves[gp.index-1].pass) ? gp.moves[gp.index-1] : null;
+  document.getElementById("game-board").innerHTML = renderBoardSvg(gp.size, board, last);
+  document.getElementById("game-title").textContent = gp.label;
+  document.getElementById("game-counter").textContent = `${gp.index} / ${gp.moves.length}수`;
+  const slider = document.getElementById("game-slider");
+  slider.max = gp.moves.length; slider.value = gp.index;
+}
+
+/* 처음/이전/다음/끝 버튼 처리. */
+function gameGo(where){
+  const gp = gamePlayer; if(!gp) return;
+  const n = gp.moves.length;
+  if(where === "first") gp.index = 0;
+  else if(where === "prev") gp.index = Math.max(0, gp.index - 1);
+  else if(where === "next") gp.index = Math.min(n, gp.index + 1);
+  else if(where === "last") gp.index = n;
+  drawGame();
+}
+
+/* 슬라이더를 움직였을 때: 그 수까지로 이동. */
+function gameSeek(value){ if(gamePlayer){ gamePlayer.index = parseInt(value, 10); drawGame(); } }
+
+/* 재생 창 닫기. */
+function closeGame(){ document.getElementById("game-modal").style.display = "none"; gamePlayer = null; }
+
+/* 키보드 ← → 로 수 넘기기, Esc로 닫기. */
+document.addEventListener("keydown", e => {
+  if(!gamePlayer) return;
+  if(e.key === "ArrowRight") gameGo("next");
+  else if(e.key === "ArrowLeft") gameGo("prev");
+  else if(e.key === "Escape") closeGame();
+});
+
+/* 기사 제목이 어떤 대국(GAMES)의 match 단어와 맞으면 그 대국 번호를, 없으면 -1을 돌려줍니다. */
+function gameForArticle(article){
+  for(let i = 0; i < GAMES.length; i++){
+    const g = GAMES[i];
+    if(g.match && g.match.some(k => article.title.includes(k))) return i;
+  }
+  return -1;
+}
+
+/* 오른쪽 '기보 다시보기' 목록을 그립니다. */
+function renderGames(){
+  const box = document.getElementById("games");
+  if(!box) return;
+  if(!GAMES.length){
+    box.innerHTML = `<div style="color:var(--muted);font-size:13px">등록된 기보가 없습니다. (설정의 GAMES에 추가하세요.)</div>`;
+    return;
+  }
+  box.innerHTML = GAMES.map((g, i) =>
+    `<button class="game-link" onclick="openGame(${i})">🔳 ${escapeHtml(g.label)}</button>`).join("");
+}
+
+
 /* 기사 제목에 PLAYERS 이름이 들어있으면, 걸린 선수 이름을 돌려줍니다. (없으면 빈 배열) */
 function matchedPlayers(title){
   return PLAYERS.filter(name => title.includes(name));
@@ -374,6 +614,11 @@ function cardHtml(article, isSpotlight){
   const playerTags = players.length
     ? ` · <span style="color:var(--gold)">⭐ ${players.join(", ")}</span>` : "";
 
+  // 이 기사가 등록된 대국(GAMES)과 매칭되면 '기보 보기' 버튼을 붙입니다.
+  const gameIdx = gameForArticle(article);
+  const gameBtn = gameIdx >= 0
+    ? `<button class="btn-sm" onclick="openGame(${gameIdx})">🔳 기보 보기</button>` : "";
+
   return `
     <div class="card ${isSpotlight ? "spotlight" : ""}" data-id="${article.id}">
       ${thumbHtml(article)}
@@ -386,6 +631,7 @@ function cardHtml(article, isSpotlight){
         </div>
         <div class="card-actions">
           <button class="btn-sm" onclick="onSummarizeClick('${article.id}')">✨ 요약</button>
+          ${gameBtn}
         </div>
         <div class="summary-box" id="summary-${article.id}" style="display:none;"></div>
       </div>
@@ -681,10 +927,11 @@ function escapeHtml(str){
 
 
 /* -------------------------------------------------------------------------
-   페이지가 열리면 순서대로: 필터 버튼 → 기전 패널 → 뉴스 불러오기 실행
+   페이지가 열리면 순서대로: 필터 버튼 → 기전 패널 → 기보 목록 → 뉴스 불러오기 실행
    ------------------------------------------------------------------------- */
 renderFilters();
 renderEvents();
+renderGames();
 loadNews();
 </script>
 
