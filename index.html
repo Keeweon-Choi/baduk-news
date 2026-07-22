@@ -345,9 +345,9 @@ const PLAYERS = [
      즉석에서 기보를 열어볼 수 있습니다.
    ▶ 기보를 직접 구하기 어려우면 Claude Code에게 "이 대국 기보를 추가해줘"라고 부탁하세요.
 
-   ※ 참고: '뉴스 제목만 보고 그 대국 기보를 자동으로 찾아오는' 것은 안정적으로 불가능합니다
-     (기사에 기보 링크가 없고, 프로 대국 기보 DB엔 공개 검색 API가 없음). 잘못 찾으면 엉뚱한
-     기보를 보여주게 되므로, 위처럼 '올바른 링크를 지정'하는 방식으로 자동화합니다.
+   ※ 참고: 아래 KBA_ENABLED가 켜져 있으면, '한국 프로대국'은 한국기원에서 자동으로 찾아
+     카드의 '🔳 기보 찾기' 버튼으로 바로 볼 수 있습니다(아래 6번 설명). 그 외(중·일·국제)
+     대국은 아직 자동 소스가 마땅치 않아, 위 sgf/sgfUrl로 직접 넣는 방식을 씁니다.
    ------------------------------------------------------------------------- */
 const GAMES = [
   {
@@ -362,6 +362,26 @@ const GAMES = [
     match: [],
     sgfUrl: "https://online-go.com/game/1000000"
   },
+];
+
+
+/* -------------------------------------------------------------------------
+   6) 기보 자동 찾기 (한국기원) — 한국 프로대국 전용
+   - KBA_ENABLED : true면, 제목에 아래 선수 이름이 있는 기사 카드에 '🔳 기보 찾기'
+                   버튼이 붙습니다. 누르면 한국기원에서 그 대국을 찾아 재생합니다.
+                   (정확히 맞으면 바로 열고, 애매하면 후보들을 보여줘 고르게 합니다.)
+   - PLAYER_ALIASES : 뉴스마다 선수 이름 표기가 달라서(한글/한자/영문), 한국기원 검색에
+                   쓸 '한글 이름'으로 통일해 주는 표입니다.
+                   ko = 한국기원에서 쓰는 한글 이름, alias = 뉴스에 나올 수 있는 다른 표기들.
+     ▶ 새 선수를 추가하려면 { } 한 줄을 복사해 ko와 alias를 채우세요.
+   ------------------------------------------------------------------------- */
+const KBA_ENABLED = true;
+const PLAYER_ALIASES = [
+  { ko: "신진서", alias: ["申真谞", "申真諝", "Shin Jinseo", "Shin Jin-seo", "シン・ジンソ"] },
+  { ko: "박정환", alias: ["朴廷桓", "Park Junghwan"] },
+  { ko: "변상일", alias: ["卞相壹", "Byun Sangil"] },
+  { ko: "김명훈", alias: [] },
+  { ko: "원성진", alias: [] },
 ];
 
 
@@ -552,6 +572,8 @@ function openSgf(sgfText, label){
   // 처음엔 대국이 끝난 '최종 국면'을 보여줍니다. (이전 버튼으로 되감기 가능)
   gamePlayer = { size: parsed.size, moves: parsed.moves, index: parsed.moves.length, label: label || "기보" };
   document.getElementById("game-modal").style.display = "flex";
+  document.getElementById("game-slider").style.display = "";      // 슬라이더 다시 보이기
+  document.querySelector(".game-controls").style.display = "";     // 이동 버튼 다시 보이기
   drawGame();
 }
 
@@ -610,6 +632,78 @@ async function importSgf(){
     catch(e){ closeGame(); alert("불러오기 실패: " + e.message); }
   }
 }
+
+/* =========================================================================
+   기보 자동 찾기 (한국기원) — 프런트엔드 쪽
+   ========================================================================= */
+
+/* 기사 제목에서 한국기원 검색에 쓸 '한글 선수명'을 찾습니다. 없으면 null. */
+function kbaKoreanName(title){
+  for(const p of PLAYER_ALIASES){
+    if(title.includes(p.ko)) return p.ko;                       // 한글 이름이 그대로 있으면 사용
+    if(p.alias.some(a => title.includes(a))) return p.ko;        // 한자·영문 표기면 한글로 변환
+  }
+  return null;
+}
+
+/* '기보 찾기'를 눌렀을 때: 한국기원에서 그 대국을 찾아 재생합니다. */
+let kbaCandidates = [];   // 후보 목록 임시 저장
+async function findKifu(articleId){
+  const a = allArticles.find(x => x.id === articleId);
+  if(!a) return;
+  const name = kbaKoreanName(a.title);
+  if(!name){ alert("이 기사에서 검색할 선수 이름을 못 찾았습니다."); return; }
+
+  const day = new Date(parseDate(a.date)).toISOString().slice(0, 10);   // 기사 날짜 YYYY-MM-DD
+  openSgf("(;SZ[19])", "한국기원에서 기보 찾는 중…");   // 로딩 표시(빈 판)
+  try{
+    const res = await fetch(`/api/kba?player=${encodeURIComponent(name)}&date=${encodeURIComponent(day)}&title=${encodeURIComponent(a.title)}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+
+    if(data.best){
+      // 신뢰도 높음 → 바로 재생 (출처 표기)
+      openSgf("(;SZ[19])", data.best.label + " · 불러오는 중…");
+      openSgf(await fetchSgfFromUrl(data.best.sgfUrl), data.best.label + "  ·  출처: 한국기원");
+    }else if(data.candidates && data.candidates.length){
+      showCandidates(data.candidates);   // 애매함 → 후보 고르게
+    }else{
+      closeGame();
+      alert("한국기원에서 이 대국의 기보를 찾지 못했습니다.\n(선수 이름이 정확한지 확인하거나, 오른쪽 '기보 불러오기'로 직접 링크를 넣어보세요.)");
+    }
+  }catch(e){
+    closeGame();
+    alert("기보 찾기 실패: " + e.message);
+  }
+}
+
+/* 후보가 여러 개일 때: 재생 창에 대국 목록을 보여주고 고르게 합니다. */
+function showCandidates(cands){
+  kbaCandidates = cands;
+  gamePlayer = null;
+  document.getElementById("game-modal").style.display = "flex";
+  document.getElementById("game-title").textContent = "어느 대국인가요? (한국기원 검색 결과)";
+  document.getElementById("game-counter").textContent = "";
+  document.getElementById("game-slider").style.display = "none";      // 슬라이더 숨김
+  document.querySelector(".game-controls").style.display = "none";     // 이동 버튼 숨김
+  document.getElementById("game-board").innerHTML =
+    `<div style="width:100%">` +
+    cands.map((c, i) =>
+      `<button class="game-link" onclick="openKbaCandidate(${i})">
+         🔳 ${escapeHtml(c.label)}
+         <span style="color:var(--muted)"> · 신뢰도 ${Math.round(c.score*100)}%</span>
+       </button>`).join("") +
+    `<div style="font-size:12px;color:var(--muted);margin-top:6px">출처: 한국기원(baduk.or.kr)</div></div>`;
+}
+
+/* 후보 목록에서 하나를 골랐을 때: 그 대국 SGF를 열어 재생합니다. */
+async function openKbaCandidate(i){
+  const c = kbaCandidates[i];
+  openSgf("(;SZ[19])", c.label + " · 불러오는 중…");
+  try{ openSgf(await fetchSgfFromUrl(c.sgfUrl), c.label + "  ·  출처: 한국기원"); }
+  catch(e){ closeGame(); alert("불러오기 실패: " + e.message); }
+}
+
 
 /* 현재 상태(index수까지)를 바둑판에 다시 그립니다. */
 function drawGame(){
@@ -699,10 +793,16 @@ function cardHtml(article, isSpotlight){
   const playerTags = players.length
     ? ` · <span style="color:var(--gold)">⭐ ${players.join(", ")}</span>` : "";
 
-  // 이 기사가 등록된 대국(GAMES)과 매칭되면 '기보 보기' 버튼을 붙입니다.
+  // 기보 버튼 결정:
+  //  ① 등록된 대국(GAMES)과 매칭되면 → '기보 보기'(직접 등록한 기보)
+  //  ② 아니면 제목에 한국기원 대상 선수가 있으면 → '기보 찾기'(한국기원 자동 검색)
   const gameIdx = gameForArticle(article);
-  const gameBtn = gameIdx >= 0
-    ? `<button class="btn-sm" onclick="openGame(${gameIdx})">🔳 기보 보기</button>` : "";
+  let gameBtn = "";
+  if(gameIdx >= 0){
+    gameBtn = `<button class="btn-sm" onclick="openGame(${gameIdx})">🔳 기보 보기</button>`;
+  }else if(KBA_ENABLED && kbaKoreanName(article.title)){
+    gameBtn = `<button class="btn-sm" onclick="findKifu('${article.id}')">🔳 기보 찾기</button>`;
+  }
 
   return `
     <div class="card ${isSpotlight ? "spotlight" : ""}" data-id="${article.id}">
