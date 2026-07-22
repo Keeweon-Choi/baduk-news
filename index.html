@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>바둑 글로벌 뉴스 대시보드</title>
+
+<style>
+/* =========================================================
+   화면 디자인(CSS). 색·간격·글꼴 등을 바꾸고 싶을 때 이 구역을 만지세요.
+   기능과는 상관없으니, 잘 모르겠으면 건드리지 않아도 됩니다.
+   ========================================================= */
+
+:root{
+  --bg:#0f1115;          /* 전체 배경색 */
+  --panel:#181b22;       /* 카드·패널 배경색 */
+  --panel-2:#20242e;     /* 살짝 밝은 배경(배지 등) */
+  --line:#2a2f3a;        /* 테두리 색 */
+  --text:#e8eaed;        /* 기본 글자색 */
+  --muted:#9aa2b1;       /* 흐린 글자색(날짜·출처 등) */
+  --accent:#4f9dff;      /* 강조색(링크·버튼) */
+  --gold:#e5b567;        /* 선수 스포트라이트 강조색 */
+  --green:#4ec27a;       /* 상태: 진행중 */
+  --blue:#4f9dff;        /* 상태: 예정 */
+  --gray:#6b7280;        /* 상태: 종료 */
+}
+
+*{ box-sizing:border-box; }
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif;
+  line-height:1.5;
+}
+
+/* 상단 헤더 */
+header{
+  padding:20px 24px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg, #131722, var(--bg));
+}
+header h1{ margin:0; font-size:22px; }
+header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
+
+/* 언어 필터 버튼 줄 */
+.filters{ display:flex; flex-wrap:wrap; gap:8px; padding:16px 24px; }
+.filter-btn{
+  background:var(--panel-2); color:var(--text);
+  border:1px solid var(--line); border-radius:999px;
+  padding:6px 14px; font-size:13px; cursor:pointer;
+}
+.filter-btn.active{ background:var(--accent); border-color:var(--accent); color:#04121f; font-weight:600; }
+
+/* 본문: 왼쪽 뉴스 + 오른쪽 기전 패널 (2단 레이아웃) */
+.layout{
+  display:grid;
+  grid-template-columns: 1fr 320px;
+  gap:20px;
+  padding:8px 24px 40px;
+  align-items:start;
+}
+
+/* 섹션 공통 제목 */
+.section-title{ font-size:15px; margin:20px 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+
+/* 뉴스 카드 */
+.card{
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:12px; padding:16px; margin-bottom:12px;
+}
+.card.spotlight{ border-color:var(--gold); background:linear-gradient(180deg,#221d13,var(--panel)); }
+.card h3{ margin:0 0 8px; font-size:16px; }
+.card h3 a{ color:var(--text); text-decoration:none; }
+.card h3 a:hover{ color:var(--accent); text-decoration:underline; }
+.card-meta{ display:flex; flex-wrap:wrap; gap:8px 12px; font-size:12px; color:var(--muted); margin-bottom:10px; }
+.lang-tag{ background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:1px 7px; }
+.card-actions{ display:flex; gap:8px; }
+.btn-sm{
+  background:transparent; color:var(--accent);
+  border:1px solid var(--accent); border-radius:8px;
+  padding:4px 12px; font-size:12px; cursor:pointer;
+}
+.btn-sm:hover{ background:rgba(79,157,255,.12); }
+.summary-box{
+  margin-top:10px; padding:10px; border-radius:8px;
+  background:var(--panel-2); font-size:13px; color:var(--muted);
+}
+
+/* 오른쪽 기전 패널 */
+.side-panel{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+.event{ padding:12px 0; border-bottom:1px solid var(--line); }
+.event:last-child{ border-bottom:none; }
+.event h4{ margin:0 0 4px; font-size:14px; }
+.event .date{ font-size:12px; color:var(--muted); }
+.event .note{ font-size:12px; margin-top:6px; }
+.badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; color:#04121f; }
+.badge.ongoing{ background:var(--green); }
+.badge.upcoming{ background:var(--blue); }
+.badge.done{ background:var(--gray); color:#fff; }
+
+/* 로딩·에러 안내 박스 */
+.status{
+  padding:20px; border-radius:12px; border:1px solid var(--line);
+  background:var(--panel); color:var(--muted); text-align:center; font-size:14px;
+}
+.status.error{ border-color:#7a3b3b; background:#241618; color:#f0b8b8; text-align:left; }
+.status.error b{ color:#ffd2d2; }
+
+/* 모바일(폭이 좁을 때): 2단 → 1단으로 세로로 쌓임 */
+@media (max-width: 820px){
+  .layout{ grid-template-columns: 1fr; }
+  header, .filters, .layout{ padding-left:14px; padding-right:14px; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>🌐 바둑 글로벌 뉴스 대시보드</h1>
+  <p>세계 바둑 뉴스·국제기전·주목 선수를 한 화면에서. (새로고침하면 최신 뉴스를 다시 불러옵니다.)</p>
+</header>
+
+<!-- 언어 필터 버튼이 자동으로 채워지는 자리 -->
+<div class="filters" id="filters"></div>
+
+<div class="layout">
+  <!-- 왼쪽: 선수 스포트라이트 + 전체 뉴스 -->
+  <main>
+    <div id="spotlight-wrap"></div>
+
+    <div class="section-title">전체 뉴스</div>
+    <div id="news"></div>
+  </main>
+
+  <!-- 오른쪽: 국제기전 일정 패널 -->
+  <aside>
+    <div class="section-title">국제기전 일정</div>
+    <div class="side-panel" id="events"></div>
+  </aside>
+</div>
+
+
+<script>
+/* =========================================================================
+   ★★★ 설정 구역 ★★★
+   여기 세 개(SOURCES / EVENTS / PLAYERS)만 바꾸면 대부분의 관리가 끝납니다.
+   값을 바꾼 뒤 파일을 저장하고, 브라우저에서 새로고침(F5)하면 반영됩니다.
+   주의: 각 항목 끝의 쉼표(,)와 따옴표(" ")를 지우지 마세요. 문법이 깨집니다.
+   ========================================================================= */
+
+
+/* -------------------------------------------------------------------------
+   1) SOURCES : 가져올 RSS 뉴스 소스 목록
+   - name : 화면에 보일 출처 이름
+   - url  : 그 매체의 RSS 주소 (RSS 주소는 보통 매체 사이트에서 'RSS'로 검색하면 나옵니다)
+   - lang : 언어 코드. "ko"(한국어) / "ja"(일본어) / "zh"(중국어) / "en"(영어) 중 하나
+   ▶ 새 소스를 추가하려면 { } 한 줄을 복사해 아래에 붙이고 값만 바꾸세요.
+   ▶ 소스를 빼려면 그 줄을 지우세요.
+   ------------------------------------------------------------------------- */
+const SOURCES = [
+  { name: "구글뉴스(바둑)",     url: "https://news.google.com/rss/search?q=바둑&hl=ko&gl=KR&ceid=KR:ko", lang: "ko" },
+  { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
+  { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
+  { name: "구글뉴스(Go game)",  url: "https://news.google.com/rss/search?q=%22go+game%22+baduk+weiqi&hl=en-US&gl=US&ceid=US:en", lang: "en" },
+];
+
+
+/* -------------------------------------------------------------------------
+   2) EVENTS : 국제기전 일정·결과 (오른쪽 패널에 표시)
+   - title  : 대회명
+   - date   : 날짜(자유롭게 적어도 됩니다. 예: "2026-08-01 ~ 08-10")
+   - status : 상태. 반드시 "ongoing"(진행중) / "upcoming"(예정) / "done"(종료) 중 하나
+   - note   : 결과·비고 메모 (자유 입력)
+   ▶ 대회가 끝나면 status를 "done"으로 바꾸고 note에 결과를 적으면 됩니다.
+   ------------------------------------------------------------------------- */
+const EVENTS = [
+  { title: "제29회 LG배 조선일보 기왕전", date: "2026-07-10 ~ 07-28", status: "ongoing", note: "8강 진행 중 · 한중 대결 주목" },
+  { title: "제10회 응씨배 세계선수권",     date: "2026-09-01 ~ 09-15", status: "upcoming", note: "4년마다 열리는 최대 규모 기전" },
+  { title: "제27회 농심신라면배",          date: "2026-10-14 ~ 2027-02", status: "upcoming", note: "한·중·일 국가대항전" },
+  { title: "제28회 삼성화재배",            date: "2026-05-20 ~ 06-05", status: "done", note: "우승: 신진서 (결승 2-0)" },
+];
+
+
+/* -------------------------------------------------------------------------
+   3) PLAYERS : 주목할 선수 이름 목록
+   - 기사 제목에 이 이름이 들어가면 위쪽 '선수 스포트라이트'에 강조됩니다.
+   - 여러 언어 표기(한자 등)도 함께 넣으면 더 잘 잡힙니다. 예: "신진서", "申真谞"
+   ------------------------------------------------------------------------- */
+const PLAYERS = [
+  "신진서", "申真谞", "Shin Jinseo",
+  "구쯔하오", "柯洁",  // 구쯔하오/커제 등
+  "박정환",
+  "이야마 유타", "井山裕太",
+];
+
+
+/* -------------------------------------------------------------------------
+   프록시 주소: 브라우저에서 직접 RSS를 가져오면 CORS 보안에 막혀서,
+   이 중계 서버(allorigins)를 거쳐서 가져옵니다. 보통 바꿀 일은 없습니다.
+   ------------------------------------------------------------------------- */
+const PROXY = "https://api.allorigins.win/raw?url=";
+
+
+
+/* =========================================================================
+   ★ 여기서부터는 기능 코드입니다 ★
+   화면 동작을 바꿀 게 아니라면 굳이 건드리지 않아도 됩니다.
+   각 함수 위에 무슨 일을 하는지 한국어로 적어두었습니다.
+   ========================================================================= */
+
+// 현재 선택된 언어 필터. "all"이면 전체를 보여줍니다.
+let currentLang = "all";
+// 불러온 모든 기사를 저장해 두는 곳(필터를 바꿔도 다시 안 불러오려고).
+let allArticles = [];
+
+
+/* 언어 코드를 사람이 읽을 이름으로 바꿔줍니다. (버튼·태그에 사용) */
+function langLabel(code){
+  const map = { all:"전체", ko:"한국어", ja:"일본어", zh:"중국어", en:"영어" };
+  return map[code] || code;
+}
+
+
+/* 화면 위쪽 언어 필터 버튼들을 만들어 줍니다. */
+function renderFilters(){
+  // SOURCES에 실제로 존재하는 언어들만 버튼으로 만들고, 맨 앞에 '전체'를 붙입니다.
+  const langs = ["all", ...new Set(SOURCES.map(s => s.lang))];
+  const box = document.getElementById("filters");
+  box.innerHTML = "";
+  langs.forEach(code => {
+    const btn = document.createElement("button");
+    btn.className = "filter-btn" + (code === currentLang ? " active" : "");
+    btn.textContent = langLabel(code);
+    // 버튼을 누르면 그 언어로 필터를 바꾸고 다시 그립니다.
+    btn.onclick = () => { currentLang = code; renderFilters(); renderNews(); renderSpotlight(); };
+    box.appendChild(btn);
+  });
+}
+
+
+/* 오른쪽 국제기전 패널을 그립니다. (EVENTS 설정을 그대로 표시) */
+function renderEvents(){
+  const box = document.getElementById("events");
+  // 상태 코드 → 배지에 보일 한국어 라벨
+  const statusLabel = { ongoing:"진행중", upcoming:"예정", done:"종료" };
+  box.innerHTML = EVENTS.map(ev => `
+    <div class="event">
+      <span class="badge ${ev.status}">${statusLabel[ev.status] || ev.status}</span>
+      <h4>${escapeHtml(ev.title)}</h4>
+      <div class="date">🗓️ ${escapeHtml(ev.date)}</div>
+      <div class="note">${escapeHtml(ev.note)}</div>
+    </div>
+  `).join("");
+}
+
+
+/* 기사 제목에 PLAYERS 이름이 들어있으면, 걸린 선수 이름을 돌려줍니다. (없으면 빈 배열) */
+function matchedPlayers(title){
+  return PLAYERS.filter(name => title.includes(name));
+}
+
+
+/* 카드 하나(기사 하나)의 HTML을 만들어 돌려줍니다. */
+function cardHtml(article, isSpotlight){
+  const players = matchedPlayers(article.title);
+  // 선수가 걸린 경우, 어떤 선수인지 작은 태그로 보여줍니다.
+  const playerTags = players.length
+    ? ` · <span style="color:var(--gold)">⭐ ${players.join(", ")}</span>` : "";
+
+  return `
+    <div class="card ${isSpotlight ? "spotlight" : ""}" data-id="${article.id}">
+      <h3><a href="${article.link}" target="_blank" rel="noopener">${escapeHtml(article.title)}</a></h3>
+      <div class="card-meta">
+        <span class="lang-tag">${langLabel(article.lang)}</span>
+        <span>${escapeHtml(article.source)}</span>
+        <span>${formatDate(article.date)}${playerTags}</span>
+      </div>
+      <div class="card-actions">
+        <button class="btn-sm" onclick="onSummarizeClick('${article.id}')">✨ 요약</button>
+      </div>
+      <div class="summary-box" id="summary-${article.id}" style="display:none;"></div>
+    </div>
+  `;
+}
+
+
+/* 현재 언어 필터에 맞는 기사만 골라 돌려줍니다. */
+function filteredArticles(){
+  if(currentLang === "all") return allArticles;
+  return allArticles.filter(a => a.lang === currentLang);
+}
+
+
+/* 왼쪽 '전체 뉴스' 목록을 그립니다. */
+function renderNews(){
+  const box = document.getElementById("news");
+  const list = filteredArticles();
+  if(list.length === 0){
+    box.innerHTML = `<div class="status">표시할 뉴스가 없습니다. (다른 언어 필터를 눌러보세요.)</div>`;
+    return;
+  }
+  box.innerHTML = list.map(a => cardHtml(a, false)).join("");
+}
+
+
+/* 위쪽 '선수 스포트라이트' 섹션을 그립니다. 제목에 PLAYERS 이름이 든 기사만 모읍니다. */
+function renderSpotlight(){
+  const wrap = document.getElementById("spotlight-wrap");
+  const list = filteredArticles().filter(a => matchedPlayers(a.title).length > 0);
+  if(list.length === 0){ wrap.innerHTML = ""; return; }  // 걸린 기사 없으면 섹션 자체를 숨김
+  wrap.innerHTML =
+    `<div class="section-title">⭐ 선수 스포트라이트</div>` +
+    list.map(a => cardHtml(a, true)).join("");
+}
+
+
+/* -------------------------------------------------------------------------
+   RSS 한 개를 프록시를 거쳐 가져와, 기사 배열로 바꿔 돌려줍니다.
+   한 소스가 실패해도 전체가 멈추지 않도록, 실패 시 빈 배열을 돌려줍니다.
+   ------------------------------------------------------------------------- */
+async function fetchSource(source){
+  try{
+    const res = await fetch(PROXY + encodeURIComponent(source.url));
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const xmlText = await res.text();
+
+    // 받아온 XML(RSS) 글자를 브라우저가 읽을 수 있는 형태로 해석합니다.
+    const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+    const items = [...doc.querySelectorAll("item")];
+
+    // RSS의 각 <item>을 우리가 쓰기 쉬운 형태로 정리합니다.
+    return items.map((item, i) => ({
+      id: `${source.lang}-${i}-${Math.random().toString(36).slice(2,7)}`, // 카드 구분용 임시 번호
+      title:  (item.querySelector("title")?.textContent || "(제목 없음)").trim(),
+      link:    item.querySelector("link")?.textContent?.trim() || "#",
+      date:    item.querySelector("pubDate")?.textContent?.trim() || "",
+      source:  source.name,
+      lang:    source.lang,
+    }));
+  }catch(err){
+    // 실패한 소스는 콘솔에만 기록하고, 화면 전체는 계속 진행합니다.
+    console.warn("소스 불러오기 실패:", source.name, err);
+    return { __failed: true, name: source.name };
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+   모든 소스를 가져와 화면을 채우는 메인 함수. (페이지가 열릴 때 실행됩니다.)
+   로딩 중 → 성공/부분성공/전체실패 상태를 각각 보여줍니다.
+   ------------------------------------------------------------------------- */
+async function loadNews(){
+  const newsBox = document.getElementById("news");
+  document.getElementById("spotlight-wrap").innerHTML = "";
+
+  // (1) 로딩 상태 표시
+  newsBox.innerHTML = `<div class="status">⏳ 뉴스를 불러오는 중입니다… (소스가 많으면 몇 초 걸릴 수 있어요.)</div>`;
+
+  // (2) 모든 소스를 동시에 가져옵니다.
+  const results = await Promise.all(SOURCES.map(fetchSource));
+
+  // (3) 성공한 기사만 모으고, 실패한 소스 이름도 따로 챙깁니다.
+  allArticles = [];
+  const failed = [];
+  results.forEach(r => {
+    if(r && r.__failed) failed.push(r.name);
+    else allArticles = allArticles.concat(r);
+  });
+
+  // (4) 최신순으로 정렬 (날짜를 못 읽는 기사는 뒤로).
+  allArticles.sort((a, b) => (parseDate(b.date) - parseDate(a.date)));
+
+  // (5) 전체 실패한 경우: 에러 상태 안내 (무엇이 문제이고 어떻게 할지)
+  if(allArticles.length === 0){
+    newsBox.innerHTML = `
+      <div class="status error">
+        <b>뉴스를 불러오지 못했습니다.</b><br><br>
+        가능한 원인과 해결 방법:<br>
+        • 인터넷 연결이 끊겼을 수 있어요 → 연결을 확인하고 새로고침(F5) 하세요.<br>
+        • 중계 서버(allorigins)가 일시적으로 느리거나 멈췄을 수 있어요 → 1~2분 뒤 다시 새로고침 하세요.<br>
+        • RSS 주소가 잘못됐을 수 있어요 → 설정 구역의 SOURCES에서 url을 확인하세요.<br>
+        ${failed.length ? `<br>실패한 소스: ${failed.join(", ")}` : ""}
+      </div>`;
+    return;
+  }
+
+  // (6) 화면 그리기
+  renderSpotlight();
+  renderNews();
+
+  // (7) 일부만 실패했으면, 뉴스 위에 작은 경고를 덧붙입니다.
+  if(failed.length){
+    newsBox.insertAdjacentHTML("afterbegin",
+      `<div class="status error" style="margin-bottom:12px;">일부 소스를 못 불러왔습니다: <b>${failed.join(", ")}</b> (나머지는 정상 표시됨)</div>`);
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+   ✨ AI 요약·번역 (지금은 자리만 있음)
+   나중에 Claude API를 붙이면, 이 함수 안에서 기사 내용을 요약해 돌려주게 됩니다.
+   ------------------------------------------------------------------------- */
+async function summarizeArticle(article){
+  // TODO: 여기에 API 연동 예정.
+  //   예) Claude API에 article.title / article.link 를 보내 요약·번역 결과를 받아오기.
+  //   지금은 아직 연결하지 않았으므로 "준비 중" 안내만 돌려줍니다.
+  return "🔧 AI 요약·번역 기능은 준비 중입니다. (나중에 Claude API를 연결할 예정입니다.)";
+}
+
+
+/* '요약' 버튼을 눌렀을 때 실행됩니다. summary 박스를 열고 결과를 채웁니다. */
+async function onSummarizeClick(articleId){
+  const box = document.getElementById("summary-" + articleId);
+  if(!box) return;
+  // 이미 열려 있으면 닫습니다(토글).
+  if(box.style.display === "block"){ box.style.display = "none"; return; }
+
+  box.style.display = "block";
+  box.textContent = "요약 준비 중…";
+
+  const article = allArticles.find(a => a.id === articleId);
+  box.textContent = await summarizeArticle(article);
+}
+
+
+/* ---- 아래는 자잘한 도우미 함수들입니다. (거의 건드릴 일 없음) ---- */
+
+/* 날짜 문자열을 시간(숫자)으로 바꿔 정렬에 씁니다. 못 읽으면 0. */
+function parseDate(str){
+  const t = Date.parse(str);
+  return isNaN(t) ? 0 : t;
+}
+
+/* 날짜를 보기 좋은 형태로 바꿉니다. (예: 2026. 7. 22.) */
+function formatDate(str){
+  const t = Date.parse(str);
+  if(isNaN(t)) return "날짜 미상";
+  return new Date(t).toLocaleDateString("ko-KR");
+}
+
+/* 제목 등에 이상한 기호(<, >)가 있어도 화면이 깨지지 않게 안전하게 바꿉니다. */
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+
+/* -------------------------------------------------------------------------
+   페이지가 열리면 순서대로: 필터 버튼 → 기전 패널 → 뉴스 불러오기 실행
+   ------------------------------------------------------------------------- */
+renderFilters();
+renderEvents();
+loadNews();
+</script>
+
+</body>
+</html>
