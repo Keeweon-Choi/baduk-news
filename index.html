@@ -209,7 +209,9 @@ const SOURCES = [
   { name: "Bing뉴스(바둑)",     url: "https://www.bing.com/news/search?q=바둑&format=rss", lang: "ko" },
   { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
   { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
-  { name: "구글뉴스(Go game)",  url: "https://news.google.com/rss/search?q=%22go+game%22+baduk+weiqi&hl=en-US&gl=US&ceid=US:en", lang: "en" },
+  // 영어는 검색어에 'when:30d'(최근 30일)를 붙여 최신 기사만 가져옵니다.
+  // (이게 없으면 구글이 2016년 알파고 같은 오래된 기사를 줄 수 있습니다.)
+  { name: "구글뉴스(Baduk/Weiqi)",  url: "https://news.google.com/rss/search?q=baduk+OR+weiqi+when%3A30d&hl=en-US&gl=US&ceid=US:en", lang: "en" },
 
   // ── 언론사 카테고리 피드: '스포츠 전체'라서 filter:true로 바둑 기사만 추립니다 ──
   { name: "연합뉴스",           url: "https://www.yna.co.kr/rss/sports.xml", lang: "ko", filter: true },
