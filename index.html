@@ -205,8 +205,8 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 <!-- 언어 필터 버튼(자동 생성) + 검색창 -->
 <div class="filters" id="filters"></div>
 <div class="searchbar">
-  <input id="search" type="search" placeholder="🔍 뉴스 검색 (제목·출처로 걸러내기)"
-         oninput="onSearch(this.value)" />
+  <input id="search" type="search" placeholder="🔍 뉴스 검색 (Enter로 웹에서 더 찾기)"
+         oninput="onSearch(this.value)" onkeydown="if(event.key==='Enter')onSearchEnter()" />
   <span id="search-count"></span>
 </div>
 
@@ -288,14 +288,14 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
    ------------------------------------------------------------------------- */
 const SOURCES = [
   // ── 검색형 피드: 이미 '바둑'으로 검색돼서 오므로 filter 불필요 ──
-  // 구글 검색어 끝의 %20when%3A30d 는 '최근 30일 기사만' 이라는 뜻입니다.
-  //   (이게 없으면 구글이 2016년 알파고 같은 오래된 기사를 줄 수 있습니다.
-  //    기간을 바꾸려면 30d를 7d(1주)·90d 등으로. %20=공백, %3A=콜론(:))
-  { name: "구글뉴스(바둑)",     url: "https://news.google.com/rss/search?q=바둑%20when%3A30d&hl=ko&gl=KR&ceid=KR:ko", lang: "ko" },
+  // 구글 검색어 끝의 %20when%3A1y 는 '최근 1년 기사만' 이라는 뜻입니다.
+  //   (구글 RSS는 쿼리당 최대 ~100건만 주므로, 창을 넓힐수록 더 과거까지 가져옵니다.
+  //    너무 오래된 기사가 싫으면 1y를 30d(30일)·90d 등으로 줄이세요. %20=공백, %3A=콜론(:))
+  { name: "구글뉴스(바둑)",     url: "https://news.google.com/rss/search?q=바둑%20when%3A1y&hl=ko&gl=KR&ceid=KR:ko", lang: "ko" },
   { name: "Bing뉴스(바둑)",     url: "https://www.bing.com/news/search?q=바둑&format=rss", lang: "ko" },
-  { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁%20when%3A30d&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
-  { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋%20when%3A30d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
-  { name: "구글뉴스(Baduk/Weiqi)",  url: "https://news.google.com/rss/search?q=baduk%20OR%20weiqi%20when%3A30d&hl=en-US&gl=US&ceid=US:en", lang: "en" },
+  { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁%20when%3A1y&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
+  { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋%20when%3A1y&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
+  { name: "구글뉴스(Baduk/Weiqi)",  url: "https://news.google.com/rss/search?q=baduk%20OR%20weiqi%20when%3A1y&hl=en-US&gl=US&ceid=US:en", lang: "en" },
 
   // ── 언론사 카테고리 피드: '스포츠 전체'라서 filter:true로 바둑 기사만 추립니다 ──
   { name: "연합뉴스",           url: "https://www.yna.co.kr/rss/sports.xml", lang: "ko", filter: true },
@@ -459,6 +459,13 @@ let searchQuery = "";
 // 불러온 모든 기사를 저장해 두는 곳(필터를 바꿔도 다시 안 불러오려고).
 let allArticles = [];
 
+// 무한 스크롤: 한 번에 보여줄 개수(PAGE_SIZE)와, 지금까지 보여준 개수(visibleCount).
+const PAGE_SIZE = 30;
+let visibleCount = PAGE_SIZE;
+// 검색어로 '웹에서 더 찾기'를 이미 한 검색어들(중복 요청 방지)과 진행 중 표시.
+const webFetchedQueries = new Set();
+let searchFetching = false;
+
 
 /* 언어 코드를 사람이 읽을 이름으로 바꿔줍니다. (버튼·태그에 사용) */
 function langLabel(code){
@@ -478,7 +485,7 @@ function renderFilters(){
     btn.className = "filter-btn" + (code === currentLang ? " active" : "");
     btn.textContent = langLabel(code);
     // 버튼을 누르면 그 언어로 필터를 바꾸고 다시 그립니다.
-    btn.onclick = () => { currentLang = code; renderFilters(); renderNews(); renderSpotlight(); };
+    btn.onclick = () => { currentLang = code; visibleCount = PAGE_SIZE; renderFilters(); renderNews(); renderSpotlight(); };
     box.appendChild(btn);
   });
 }
@@ -940,18 +947,24 @@ function filteredArticles(){
   });
 }
 
-/* 검색창에 입력할 때: 검색어를 저장하고 목록을 다시 그립니다. */
+/* 검색창에 입력할 때: 검색어를 저장하고 목록을 다시 그립니다. (첫 페이지부터) */
 function onSearch(value){
   searchQuery = value.trim().toLowerCase();
+  visibleCount = PAGE_SIZE;        // 검색이 바뀌면 처음부터 다시 보여줍니다.
   renderNews();
   renderSpotlight();
   // 검색 중이면 몇 건이 걸렸는지 표시합니다.
   const countEl = document.getElementById("search-count");
-  countEl.textContent = searchQuery ? `${filteredArticles().length}건 검색됨` : "";
+  countEl.textContent = searchQuery ? `${filteredArticles().length}건` : "";
+}
+
+/* 검색창에서 Enter를 누르면: 그 검색어로 '웹에서 더' 끌어옵니다. */
+function onSearchEnter(){
+  if(searchQuery) searchFetch();
 }
 
 
-/* 왼쪽 '전체 뉴스' 목록을 그립니다. */
+/* 왼쪽 '전체 뉴스' 목록을 그립니다. (무한 스크롤: visibleCount 개까지만 그림) */
 function renderNews(){
   const box = document.getElementById("news");
   const list = filteredArticles();
@@ -959,8 +972,72 @@ function renderNews(){
     box.innerHTML = `<div class="status">표시할 뉴스가 없습니다. ${searchQuery ? "검색어를 바꾸거나 지워보세요." : "다른 언어 필터를 눌러보세요."}</div>`;
     return;
   }
-  box.innerHTML = list.map(a => cardHtml(a, false)).join("");
+  const shown = list.slice(0, visibleCount);
+  let html = shown.map(a => cardHtml(a, false)).join("");
+
+  // 목록 끝 안내
+  if(visibleCount < list.length){
+    // 아직 더 보여줄 게 남음 → 스크롤하면 자동으로 더 나옵니다.
+    html += `<div class="status" id="load-more">아래로 스크롤하면 더 나옵니다  (${shown.length} / ${list.length})</div>`;
+  }else if(searchQuery && !searchFetching){
+    // 로컬 결과는 다 봤음 → 웹에서 더 찾기 제안
+    html += `<div class="status">여기까지가 지금 불러온 '${escapeHtml(searchQuery)}' 결과예요.
+      <button class="btn-sm" onclick="searchFetch()">🔍 웹에서 더 찾기</button></div>`;
+  }else if(!searchQuery){
+    html += `<div class="status">최근 뉴스는 여기까지예요. (RSS는 최신 수개월치만 제공 — 더 옛날 기사는 위 검색창에서 키워드로 찾아보세요.)</div>`;
+  }
+  box.innerHTML = html;
 }
+
+/* 검색어로 '웹에서 더' 끌어옵니다: 그 검색어 전용 구글 뉴스 피드(언어별)를 새로 받아 합칩니다.
+   → 지금 화면에 없던 더 과거 기사까지 가져올 수 있습니다. */
+async function searchFetch(){
+  const q = (document.getElementById("search").value || "").trim();
+  if(!q || searchFetching) return;
+  searchFetching = true;
+  const countEl = document.getElementById("search-count");
+  countEl.textContent = "웹에서 더 찾는 중…";
+
+  // 검색어 전용 피드(언어별). when:1y = 최근 1년 안에서 최대한 과거까지.
+  const encQ = encodeURIComponent(q + " when:1y");
+  const langs = [
+    ["ko", "KR", "KR:ko"], ["ja", "JP", "JP:ja"],
+    ["zh-CN", "CN", "CN:zh-Hans"], ["en-US", "US", "US:en"]
+  ];
+  const srcs = langs.map(([hl, gl, ceid]) => ({
+    name: `검색:${q}`,
+    url: `https://news.google.com/rss/search?q=${encQ}&hl=${hl}&gl=${gl}&ceid=${ceid}`,
+    lang: hl.split("-")[0]
+  }));
+
+  try{
+    const results = await Promise.all(srcs.map(fetchSource));
+    const fresh = results.filter(r => !r.__failed).flat();
+    allArticles = sortByDate(dedupe(allArticles.concat(fresh)));   // 기존 것과 합쳐 중복 제거
+    webFetchedQueries.add(searchQuery);
+  }catch(e){
+    console.warn("검색 추가 수집 실패:", e);
+  }finally{
+    searchFetching = false;
+    visibleCount += PAGE_SIZE;      // 새로 온 (더 과거) 기사들이 이어서 보이도록 조금 더 펼침
+    renderNews();
+    renderSpotlight();
+    const countEl = document.getElementById("search-count");
+    countEl.textContent = searchQuery ? `${filteredArticles().length}건` : "";
+  }
+}
+
+/* 스크롤이 페이지 끝에 가까워지면: 더 보여주고, 다 봤으면 (검색 중일 때) 웹에서 더 찾습니다. */
+window.addEventListener("scroll", () => {
+  if(window.innerHeight + window.scrollY < document.body.offsetHeight - 500) return;  // 아직 끝 아님
+  const total = filteredArticles().length;
+  if(visibleCount < total){
+    visibleCount += PAGE_SIZE;            // 더 펼쳐 보여주기
+    renderNews();
+  }else if(searchQuery && !searchFetching && !webFetchedQueries.has(searchQuery)){
+    searchFetch();                        // 로컬을 다 봤고 검색 중이면 웹에서 더
+  }
+});
 
 
 /* 위쪽 '선수 스포트라이트' 섹션을 그립니다. 제목에 PLAYERS 이름이 든 기사만 모읍니다. */
