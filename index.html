@@ -64,12 +64,44 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 /* 섹션 공통 제목 */
 .section-title{ font-size:15px; margin:20px 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
 
-/* 뉴스 카드 */
+/* 뉴스 카드 : 왼쪽 사진(썸네일) + 오른쪽 내용 (가로 배치) */
 .card{
   background:var(--panel); border:1px solid var(--line);
-  border-radius:12px; padding:16px; margin-bottom:12px;
+  border-radius:12px; margin-bottom:12px;
+  display:flex; gap:16px; overflow:hidden;
 }
 .card.spotlight{ border-color:var(--gold); background:linear-gradient(180deg,#221d13,var(--panel)); }
+
+/* 카드 왼쪽 사진 영역 */
+.thumb{
+  flex:0 0 200px; align-self:stretch; min-height:120px;
+  position:relative; overflow:hidden; background:var(--panel-2);
+}
+.thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+/* 사진이 없을 때 쓰는 자동 썸네일(바둑판 격자 + 바둑돌 느낌) */
+.thumb-ph{
+  width:100%; height:100%; position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+  gap:8px; color:#fff; text-align:center; padding:10px;
+  background-size:20px 20px;
+  background-image:
+    linear-gradient(rgba(255,255,255,.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.10) 1px, transparent 1px);
+}
+.thumb-ph .stone{
+  width:34px; height:34px; border-radius:50%;
+  background:radial-gradient(circle at 34% 30%, #fff, #cfd6e2 40%, #59627a);
+  box-shadow:0 2px 6px rgba(0,0,0,.4);
+}
+.thumb-ph .ph-source{ font-size:12px; font-weight:600; opacity:.95; text-shadow:0 1px 2px rgba(0,0,0,.5); }
+/* 언어별 배경색(자동 썸네일) */
+.thumb-ph.ko{ background-color:#2d4a63; }
+.thumb-ph.ja{ background-color:#5b3350; }
+.thumb-ph.zh{ background-color:#5c3a2e; }
+.thumb-ph.en{ background-color:#2f4d3a; }
+
+/* 카드 오른쪽 내용 영역 */
+.card-body{ flex:1; min-width:0; padding:16px 16px 16px 0; }
 .card h3{ margin:0 0 8px; font-size:16px; }
 .card h3 a{ color:var(--text); text-decoration:none; }
 .card h3 a:hover{ color:var(--accent); text-decoration:underline; }
@@ -111,6 +143,10 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 @media (max-width: 820px){
   .layout{ grid-template-columns: 1fr; }
   header, .filters, .layout{ padding-left:14px; padding-right:14px; }
+  /* 모바일: 카드를 세로로 → 사진이 위, 내용이 아래로 쌓임 */
+  .card{ flex-direction:column; }
+  .thumb{ flex-basis:auto; width:100%; height:170px; }
+  .card-body{ padding:0 16px 16px; }
 }
 </style>
 </head>
@@ -153,17 +189,44 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 
 /* -------------------------------------------------------------------------
    1) SOURCES : 가져올 RSS 뉴스 소스 목록
-   - name : 화면에 보일 출처 이름
-   - url  : 그 매체의 RSS 주소 (RSS 주소는 보통 매체 사이트에서 'RSS'로 검색하면 나옵니다)
-   - lang : 언어 코드. "ko"(한국어) / "ja"(일본어) / "zh"(중국어) / "en"(영어) 중 하나
-   ▶ 새 소스를 추가하려면 { } 한 줄을 복사해 아래에 붙이고 값만 바꾸세요.
+   - name   : 화면에 보일 출처 이름
+   - url    : 그 매체의 RSS 주소 (매체 사이트에서 'RSS'로 검색하면 나옵니다)
+   - lang   : 언어 코드. "ko"(한국어) / "ja"(일본어) / "zh"(중국어) / "en"(영어)
+   - filter : (선택) true로 두면, 그 소스에서 '바둑 관련 기사'만 걸러서 보여줍니다.
+              → 연합뉴스·조선일보처럼 '스포츠 전체' 피드를 넣을 때 켜세요.
+                (무엇을 바둑 기사로 볼지는 아래 KEYWORDS 목록으로 정합니다.)
+              → 구글·Bing처럼 이미 '바둑'으로 검색된 피드는 filter가 필요 없습니다.
+
+   ※ 참고: 네이버·다음 포털은 공개 RSS 서비스를 종료해서 넣어도 작동하지 않습니다.
+     대신 아래처럼 '언론사 RSS'를 넣으면 그 언론사(네이버·다음에도 실리는) 기사가 들어옵니다.
+
+   ▶ 새 소스를 추가하려면 { } 한 줄을 복사해 붙이고 값만 바꾸세요.
    ▶ 소스를 빼려면 그 줄을 지우세요.
    ------------------------------------------------------------------------- */
 const SOURCES = [
+  // ── 검색형 피드: 이미 '바둑'으로 검색돼서 오므로 filter 불필요 ──
   { name: "구글뉴스(바둑)",     url: "https://news.google.com/rss/search?q=바둑&hl=ko&gl=KR&ceid=KR:ko", lang: "ko" },
+  { name: "Bing뉴스(바둑)",     url: "https://www.bing.com/news/search?q=바둑&format=rss", lang: "ko" },
   { name: "구글뉴스(囲碁)",     url: "https://news.google.com/rss/search?q=囲碁&hl=ja&gl=JP&ceid=JP:ja",   lang: "ja" },
   { name: "구글뉴스(围棋)",     url: "https://news.google.com/rss/search?q=围棋&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", lang: "zh" },
   { name: "구글뉴스(Go game)",  url: "https://news.google.com/rss/search?q=%22go+game%22+baduk+weiqi&hl=en-US&gl=US&ceid=US:en", lang: "en" },
+
+  // ── 언론사 카테고리 피드: '스포츠 전체'라서 filter:true로 바둑 기사만 추립니다 ──
+  { name: "연합뉴스",           url: "https://www.yna.co.kr/rss/sports.xml", lang: "ko", filter: true },
+  { name: "조선일보",           url: "https://www.chosun.com/arc/outboundfeeds/rss/category/sports/?outputType=xml", lang: "ko", filter: true },
+  { name: "SBS",                url: "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=07", lang: "ko", filter: true },
+];
+
+
+/* -------------------------------------------------------------------------
+   KEYWORDS : filter가 켜진 소스에서 '바둑 관련 기사'로 인정할 단어들.
+   기사 제목·요약에 이 중 하나라도 들어 있으면 통과시킵니다.
+   ▶ 바둑 기사가 잘 안 걸리면 단어를 더 추가하세요. (예: 새 기전 이름, 새 선수 이름)
+   ------------------------------------------------------------------------- */
+const KEYWORDS = [
+  "바둑", "기전", "기원", "입단", "포석", "대국", "프로기사", "바둑판",
+  "신진서", "박정환", "커제", "구쯔하오",
+  "LG배", "응씨배", "농심", "삼성화재배", "기왕전", "명인전", "국수전", "천원전",
 ];
 
 
@@ -197,10 +260,34 @@ const PLAYERS = [
 
 
 /* -------------------------------------------------------------------------
-   프록시 주소: 브라우저에서 직접 RSS를 가져오면 CORS 보안에 막혀서,
-   이 중계 서버(allorigins)를 거쳐서 가져옵니다. 보통 바꿀 일은 없습니다.
+   프록시 목록: 브라우저는 CORS 보안 때문에 다른 사이트 RSS를 직접 못 가져옵니다.
+   그래서 아래 프록시들을 '위에서부터 순서대로' 시도해, 되는 것을 씁니다.
+   - 첫 번째 "/api/rss" 는 우리가 Vercel에 올린 서버 함수라 가장 빠르고 안정적입니다.
+     (단, 로컬에서 index.html을 더블클릭해 열면 이건 없으므로 아래 공개 프록시로 넘어갑니다.)
+   - 나머지는 공개 무료 프록시(백업). 하나가 느리거나 죽어도 다음 걸로 자동 전환됩니다.
+   보통 바꿀 일은 없습니다.
    ------------------------------------------------------------------------- */
-const PROXY = "https://api.allorigins.win/raw?url=";
+const PROXIES = [
+  "/api/rss?url=",                          // ① 우리 Vercel 서버 함수 (배포 시 가장 빠름)
+  "https://corsproxy.io/?url=",             // ② 공개 백업 1
+  "https://api.allorigins.win/raw?url=",    // ③ 공개 백업 2
+];
+
+
+/* -------------------------------------------------------------------------
+   4) 사진 미리보기 옵션 (카드에 기사 사진을 보여줄지 설정)
+   - SHOW_IMAGES     : true면 카드에 사진(또는 자동 썸네일)을 표시합니다.
+   - FETCH_OG_IMAGE  : RSS에 사진이 없을 때, 기사 페이지에 들어가 대표사진을
+                       추가로 가져올지 여부입니다.
+                       ※ 켜면(true) 화면이 조금 느려지고, '구글뉴스' 소스처럼
+                         링크가 리다이렉트인 경우엔 사진을 못 가져올 때가 많습니다.
+                         진짜 사진을 실어주는 소스를 SOURCES에 넣었을 때만 켜세요.
+   - OG_FETCH_LIMIT  : 위 기능을 켰을 때, 사진을 가져올 최대 기사 수(속도 조절).
+   ▶ 사진이 안 뜨는 기사는 바둑판 모양의 자동 썸네일로 대체됩니다.
+   ------------------------------------------------------------------------- */
+const SHOW_IMAGES    = true;
+const FETCH_OG_IMAGE = false;
+const OG_FETCH_LIMIT = 20;
 
 
 
@@ -262,6 +349,22 @@ function matchedPlayers(title){
 }
 
 
+/* 카드 왼쪽의 사진(썸네일) 영역 HTML을 만듭니다.
+   실제 사진이 있으면 사진을, 없거나 사진이 깨지면 자동 썸네일(바둑판 모양)을 보여줍니다. */
+function thumbHtml(article){
+  if(!SHOW_IMAGES) return "";
+  // 자동 썸네일은 항상 뒤에 깔아두고, 실제 사진이 있으면 그 위에 덮어씌웁니다.
+  // 사진 주소가 깨지면(onerror) 사진을 숨겨서 뒤의 자동 썸네일이 드러나게 합니다.
+  const placeholder = `<div class="thumb-ph ${escapeHtml(article.lang)}">
+       <div class="stone"></div>
+       <div class="ph-source">${escapeHtml(article.source)}</div>
+     </div>`;
+  const realImg = article.image
+    ? `<img src="${escapeHtml(article.image)}" loading="lazy" alt="" onerror="this.style.display='none'">`
+    : "";
+  return `<div class="thumb">${placeholder}${realImg}</div>`;
+}
+
 /* 카드 하나(기사 하나)의 HTML을 만들어 돌려줍니다. */
 function cardHtml(article, isSpotlight){
   const players = matchedPlayers(article.title);
@@ -271,16 +374,19 @@ function cardHtml(article, isSpotlight){
 
   return `
     <div class="card ${isSpotlight ? "spotlight" : ""}" data-id="${article.id}">
-      <h3><a href="${article.link}" target="_blank" rel="noopener">${escapeHtml(article.title)}</a></h3>
-      <div class="card-meta">
-        <span class="lang-tag">${langLabel(article.lang)}</span>
-        <span>${escapeHtml(article.source)}</span>
-        <span>${formatDate(article.date)}${playerTags}</span>
+      ${thumbHtml(article)}
+      <div class="card-body">
+        <h3><a href="${article.link}" target="_blank" rel="noopener">${escapeHtml(article.title)}</a></h3>
+        <div class="card-meta">
+          <span class="lang-tag">${langLabel(article.lang)}</span>
+          <span>${escapeHtml(article.source)}</span>
+          <span>${formatDate(article.date)}${playerTags}</span>
+        </div>
+        <div class="card-actions">
+          <button class="btn-sm" onclick="onSummarizeClick('${article.id}')">✨ 요약</button>
+        </div>
+        <div class="summary-box" id="summary-${article.id}" style="display:none;"></div>
       </div>
-      <div class="card-actions">
-        <button class="btn-sm" onclick="onSummarizeClick('${article.id}')">✨ 요약</button>
-      </div>
-      <div class="summary-box" id="summary-${article.id}" style="display:none;"></div>
     </div>
   `;
 }
@@ -317,28 +423,80 @@ function renderSpotlight(){
 
 
 /* -------------------------------------------------------------------------
-   RSS 한 개를 프록시를 거쳐 가져와, 기사 배열로 바꿔 돌려줍니다.
-   한 소스가 실패해도 전체가 멈추지 않도록, 실패 시 빈 배열을 돌려줍니다.
+   RSS 한 개(<item>)에서 대표 사진 주소를 찾아 돌려줍니다. 없으면 null.
+   RSS마다 사진을 담는 방식이 달라서, 흔한 위치들을 순서대로 살펴봅니다.
+   ------------------------------------------------------------------------- */
+function extractImage(item){
+  // (1) media:content / media:thumbnail 태그의 url 속성
+  for(const tag of ["media:content", "media:thumbnail"]){
+    const el = item.getElementsByTagName(tag)[0];
+    const url = el?.getAttribute("url");
+    if(url) return url;
+  }
+  // (2) enclosure 태그(첨부파일)가 이미지인 경우
+  const enc = item.getElementsByTagName("enclosure")[0];
+  if(enc && (enc.getAttribute("type") || "").startsWith("image")) return enc.getAttribute("url");
+  // (3) 본문(description / content:encoded) 안에 들어있는 <img> 태그의 주소
+  const html = (item.querySelector("description")?.textContent || "")
+             + (item.getElementsByTagName("content:encoded")[0]?.textContent || "");
+  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if(m) return m[1];
+  return null;
+}
+
+
+/* -------------------------------------------------------------------------
+   프록시 목록(PROXIES)을 위에서부터 시도해, 되는 것으로 RSS 내용을 가져옵니다.
+   하나가 느리거나(13초 초과) 죽어 있으면 다음 프록시로 자동 전환합니다.
+   ------------------------------------------------------------------------- */
+async function fetchViaProxy(url){
+  let lastErr;
+  for(const proxy of PROXIES){
+    try{
+      const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(13000) });
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      // 제대로 된 RSS인지 최소한만 확인합니다(<item> 태그가 있어야 함).
+      if(text && text.includes("<item")) return text;
+      throw new Error("RSS 형식이 아님");
+    }catch(e){
+      lastErr = e;   // 이 프록시는 실패 → 다음 프록시로
+    }
+  }
+  throw lastErr || new Error("모든 프록시 실패");
+}
+
+/* 기사 제목에 KEYWORDS 중 하나라도 들어있으면 '바둑 기사'로 봅니다. (filter 소스용) */
+function isBadukArticle(article){
+  return KEYWORDS.some(k => article.title.includes(k));
+}
+
+/* -------------------------------------------------------------------------
+   RSS 한 개를 가져와 기사 배열로 바꿔 돌려줍니다.
+   한 소스가 실패해도 전체가 멈추지 않도록, 실패 시 표시만 남깁니다.
    ------------------------------------------------------------------------- */
 async function fetchSource(source){
   try{
-    const res = await fetch(PROXY + encodeURIComponent(source.url));
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    const xmlText = await res.text();
+    const xmlText = await fetchViaProxy(source.url);
 
     // 받아온 XML(RSS) 글자를 브라우저가 읽을 수 있는 형태로 해석합니다.
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
     const items = [...doc.querySelectorAll("item")];
 
     // RSS의 각 <item>을 우리가 쓰기 쉬운 형태로 정리합니다.
-    return items.map((item, i) => ({
+    let articles = items.map((item, i) => ({
       id: `${source.lang}-${i}-${Math.random().toString(36).slice(2,7)}`, // 카드 구분용 임시 번호
       title:  (item.querySelector("title")?.textContent || "(제목 없음)").trim(),
       link:    item.querySelector("link")?.textContent?.trim() || "#",
       date:    item.querySelector("pubDate")?.textContent?.trim() || "",
       source:  source.name,
       lang:    source.lang,
+      image:   SHOW_IMAGES ? extractImage(item) : null,  // RSS에 사진이 있으면 그 주소, 없으면 null
     }));
+
+    // filter가 켜진 소스(연합·조선 등)는 바둑 관련 기사만 남깁니다.
+    if(source.filter) articles = articles.filter(isBadukArticle);
+    return articles;
   }catch(err){
     // 실패한 소스는 콘솔에만 기록하고, 화면 전체는 계속 진행합니다.
     console.warn("소스 불러오기 실패:", source.name, err);
@@ -348,53 +506,125 @@ async function fetchSource(source){
 
 
 /* -------------------------------------------------------------------------
+   (선택 기능) 기사 페이지에 들어가 대표사진(og:image)을 가져옵니다.
+   FETCH_OG_IMAGE 옵션이 켜져 있을 때만, 사진이 없는 기사에 대해 실행됩니다.
+   한 기사라도 실패하면 그 기사만 조용히 건너뜁니다.
+   ------------------------------------------------------------------------- */
+async function fetchOgImage(url){
+  try{
+    const res = await fetch(PROXY + encodeURIComponent(url), { signal: AbortSignal.timeout(7000) });
+    if(!res.ok) return null;
+    const html = await res.text();
+    // <meta property="og:image" content="..."> 에서 사진 주소를 뽑아냅니다.
+    const m = html.match(/<meta[^>]+(?:property|name)=["']og:image["'][^>]*content=["']([^"']+)["']/i)
+           || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image["']/i);
+    return m ? m[1] : null;
+  }catch(e){ return null; }
+}
+
+/* 사진 없는 기사들에 og:image를 채워 넣고, 다 되면 화면을 다시 그립니다. */
+async function enrichWithOgImages(){
+  if(!FETCH_OG_IMAGE || !SHOW_IMAGES) return;
+  const targets = allArticles.filter(a => !a.image).slice(0, OG_FETCH_LIMIT);
+  await Promise.all(targets.map(async a => { a.image = await fetchOgImage(a.link); }));
+  // 사진이 새로 채워졌으니 카드들을 다시 그립니다.
+  renderSpotlight();
+  renderNews();
+}
+
+
+/* 스포트라이트와 뉴스 목록을 한꺼번에 다시 그립니다. */
+function renderAll(){ renderSpotlight(); renderNews(); }
+
+/* 같은 기사(같은 링크)가 여러 소스에서 중복으로 들어오면 하나만 남깁니다. */
+function dedupe(articles){
+  const seen = new Set();
+  return articles.filter(a => {
+    const key = a.link || a.title;
+    if(seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+}
+
+/* 최신순 정렬(날짜를 못 읽는 기사는 뒤로). */
+function sortByDate(articles){
+  return articles.sort((a, b) => parseDate(b.date) - parseDate(a.date));
+}
+
+/* 불러온 기사를 브라우저에 저장(캐시)합니다. → 다음 접속 때 즉시 보여줄 수 있습니다. */
+const CACHE_KEY = "baduk-news-cache-v1";
+function saveCache(articles){
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify(articles)); }catch(e){}
+}
+function loadCache(){
+  try{
+    const data = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return Array.isArray(data) ? data : null;
+  }catch(e){ return null; }
+}
+
+
+/* -------------------------------------------------------------------------
    모든 소스를 가져와 화면을 채우는 메인 함수. (페이지가 열릴 때 실행됩니다.)
-   로딩 중 → 성공/부분성공/전체실패 상태를 각각 보여줍니다.
+   빠르게 느껴지도록 두 가지를 합니다:
+   ① 캐시(지난 결과)가 있으면 '즉시' 먼저 보여줍니다.
+   ② 각 소스는 도착하는 대로 바로 화면에 반영합니다(제일 느린 소스를 안 기다림).
    ------------------------------------------------------------------------- */
 async function loadNews(){
   const newsBox = document.getElementById("news");
-  document.getElementById("spotlight-wrap").innerHTML = "";
 
-  // (1) 로딩 상태 표시
-  newsBox.innerHTML = `<div class="status">⏳ 뉴스를 불러오는 중입니다… (소스가 많으면 몇 초 걸릴 수 있어요.)</div>`;
+  // (1) 캐시가 있으면 지난 결과를 즉시 표시하고, 위에 '갱신 중' 안내를 붙입니다.
+  const cached = loadCache();
+  const hadCache = !!(cached && cached.length);
+  if(hadCache){
+    allArticles = cached;
+    renderAll();
+    newsBox.insertAdjacentHTML("afterbegin",
+      `<div class="status" style="margin-bottom:12px;">🔄 최신 뉴스로 갱신 중…</div>`);
+  }else{
+    document.getElementById("spotlight-wrap").innerHTML = "";
+    newsBox.innerHTML = `<div class="status">⏳ 뉴스를 불러오는 중입니다…</div>`;
+  }
 
-  // (2) 모든 소스를 동시에 가져옵니다.
-  const results = await Promise.all(SOURCES.map(fetchSource));
-
-  // (3) 성공한 기사만 모으고, 실패한 소스 이름도 따로 챙깁니다.
-  allArticles = [];
+  // (2) 각 소스를 동시에 요청하되, 도착하는 것부터 바로 화면에 반영합니다.
+  const fresh = [];
   const failed = [];
-  results.forEach(r => {
-    if(r && r.__failed) failed.push(r.name);
-    else allArticles = allArticles.concat(r);
-  });
+  await Promise.all(SOURCES.map(async source => {
+    const result = await fetchSource(source);
+    if(result && result.__failed){ failed.push(result.name); return; }
+    fresh.push(...result);
+    allArticles = sortByDate(dedupe(fresh));
+    renderAll();                          // 새 소스가 올 때마다 즉시 갱신
+  }));
 
-  // (4) 최신순으로 정렬 (날짜를 못 읽는 기사는 뒤로).
-  allArticles.sort((a, b) => (parseDate(b.date) - parseDate(a.date)));
-
-  // (5) 전체 실패한 경우: 에러 상태 안내 (무엇이 문제이고 어떻게 할지)
-  if(allArticles.length === 0){
-    newsBox.innerHTML = `
-      <div class="status error">
-        <b>뉴스를 불러오지 못했습니다.</b><br><br>
-        가능한 원인과 해결 방법:<br>
-        • 인터넷 연결이 끊겼을 수 있어요 → 연결을 확인하고 새로고침(F5) 하세요.<br>
-        • 중계 서버(allorigins)가 일시적으로 느리거나 멈췄을 수 있어요 → 1~2분 뒤 다시 새로고침 하세요.<br>
-        • RSS 주소가 잘못됐을 수 있어요 → 설정 구역의 SOURCES에서 url을 확인하세요.<br>
-        ${failed.length ? `<br>실패한 소스: ${failed.join(", ")}` : ""}
-      </div>`;
+  // (3) 새로 불러온 게 하나도 없으면: 캐시가 있으면 그대로 두고, 없으면 에러 안내.
+  if(fresh.length === 0){
+    if(hadCache){
+      newsBox.insertAdjacentHTML("afterbegin",
+        `<div class="status error" style="margin-bottom:12px;">지금 최신 뉴스를 못 불러와 <b>지난 결과</b>를 보여주고 있어요. 잠시 뒤 새로고침(F5) 해보세요.</div>`);
+    }else{
+      newsBox.innerHTML = `
+        <div class="status error">
+          <b>뉴스를 불러오지 못했습니다.</b><br><br>
+          가능한 원인과 해결 방법:<br>
+          • 인터넷 연결이 끊겼을 수 있어요 → 연결을 확인하고 새로고침(F5) 하세요.<br>
+          • 프록시(중계 서버)가 일시적으로 느리거나 멈췄을 수 있어요 → 1~2분 뒤 다시 새로고침 하세요.<br>
+          • RSS 주소가 잘못됐을 수 있어요 → 설정 구역의 SOURCES에서 url을 확인하세요.<br>
+          ${failed.length ? `<br>실패한 소스: ${failed.join(", ")}` : ""}
+        </div>`;
+    }
     return;
   }
 
-  // (6) 화면 그리기
-  renderSpotlight();
-  renderNews();
-
-  // (7) 일부만 실패했으면, 뉴스 위에 작은 경고를 덧붙입니다.
+  // (4) 최종 결과를 저장(캐시)하고, 일부 실패가 있으면 작은 경고를 붙입니다.
+  saveCache(allArticles);
   if(failed.length){
     newsBox.insertAdjacentHTML("afterbegin",
       `<div class="status error" style="margin-bottom:12px;">일부 소스를 못 불러왔습니다: <b>${failed.join(", ")}</b> (나머지는 정상 표시됨)</div>`);
   }
+
+  // (5) (옵션) 사진 없는 기사에 대표사진을 뒤늦게 채워 넣습니다. (FETCH_OG_IMAGE가 켜졌을 때만)
+  enrichWithOgImages();
 }
 
 
