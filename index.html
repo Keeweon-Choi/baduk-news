@@ -72,6 +72,9 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 
 /* 섹션 공통 제목 */
 .section-title{ font-size:15px; margin:20px 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+/* 클릭해서 접었다 펼 수 있는 제목(선수 스포트라이트) */
+.spotlight-head{ cursor:pointer; user-select:none; }
+.spotlight-head:hover{ color:var(--text); }
 
 /* 뉴스 카드 : 왼쪽 사진(썸네일) + 오른쪽 내용 (가로 배치) */
 .card{
@@ -343,6 +346,10 @@ const PLAYERS = [
   "박정환",
   "이야마 유타", "井山裕太",
 ];
+
+// 선수 스포트라이트 섹션을 처음에 '펼친 상태'로 시작할지 여부.
+//   true = 펼침(기본) / false = 접힘.  (화면의 '⭐ 선수 스포트라이트' 제목을 클릭하면 언제든 접었다 펼 수 있습니다.)
+const SHOW_SPOTLIGHT = true;
 
 
 /* -------------------------------------------------------------------------
@@ -1040,14 +1047,27 @@ window.addEventListener("scroll", () => {
 });
 
 
-/* 위쪽 '선수 스포트라이트' 섹션을 그립니다. 제목에 PLAYERS 이름이 든 기사만 모읍니다. */
+// 선수 스포트라이트가 지금 펼쳐져 있는지. 제목을 클릭하면 바뀝니다.
+let spotlightOpen = SHOW_SPOTLIGHT;
+
+/* '⭐ 선수 스포트라이트' 제목을 클릭했을 때: 접기/펼치기 토글. */
+function toggleSpotlight(){ spotlightOpen = !spotlightOpen; renderSpotlight(); }
+
+/* 위쪽 '선수 스포트라이트' 섹션을 그립니다. 제목에 PLAYERS 이름이 든 기사만 모읍니다.
+   제목을 누르면 접었다 폈다 할 수 있습니다. */
 function renderSpotlight(){
   const wrap = document.getElementById("spotlight-wrap");
   const list = filteredArticles().filter(a => matchedPlayers(a.title).length > 0);
   if(list.length === 0){ wrap.innerHTML = ""; return; }  // 걸린 기사 없으면 섹션 자체를 숨김
-  wrap.innerHTML =
-    `<div class="section-title">⭐ 선수 스포트라이트</div>` +
-    list.map(a => cardHtml(a, true)).join("");
+
+  // 제목(클릭하면 토글). 접혀 있으면 ▸, 펼쳐 있으면 ▾ 표시.
+  const header =
+    `<div class="section-title spotlight-head" onclick="toggleSpotlight()" title="클릭하면 접었다 펼 수 있어요">
+       ${spotlightOpen ? "▾" : "▸"} ⭐ 선수 스포트라이트
+       <span style="color:var(--muted); font-weight:400">(${list.length}건)</span>
+     </div>`;
+  // 펼쳐 있을 때만 카드들을 그립니다.
+  wrap.innerHTML = header + (spotlightOpen ? list.map(a => cardHtml(a, true)).join("") : "");
 }
 
 
