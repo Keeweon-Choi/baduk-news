@@ -148,6 +148,14 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 }
 .game-link:hover{ border-color:var(--accent); }
 
+/* 즉석 기보 불러오기 입력칸 */
+.import-box{ display:flex; gap:6px; margin-top:8px; }
+.import-box input{
+  flex:1; min-width:0; background:var(--panel-2); color:var(--text);
+  border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:12px;
+}
+.import-box input:focus{ outline:none; border-color:var(--accent); }
+
 /* 기보 재생 창(모달): 화면 가운데에 바둑판을 띄웁니다 */
 .modal{
   display:none; position:fixed; inset:0; z-index:50;
@@ -202,6 +210,13 @@ header p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
 
     <div class="section-title">기보 다시보기</div>
     <div class="side-panel" id="games"></div>
+
+    <!-- 즉석 기보 불러오기: 링크(직접 .sgf / OGS 대국) 또는 SGF 내용을 붙여넣기 -->
+    <div class="import-box">
+      <input id="sgf-import" type="text" placeholder="SGF 링크 또는 내용 붙여넣기"
+             onkeydown="if(event.key==='Enter')importSgf()" />
+      <button class="btn-sm" onclick="importSgf()">열기</button>
+    </div>
   </aside>
 </div>
 
@@ -316,21 +331,36 @@ const PLAYERS = [
              '기보 보기' 버튼이 자동으로 붙습니다.
              예: ["신진서","카타고"] → 신진서·카타고 관련 기사에 버튼이 생김.
              비워두면([]) 버튼은 안 붙고, 오른쪽 '기보 다시보기' 목록에서만 열 수 있습니다.
-   - sgf   : 기보 파일(SGF)의 내용.
-             go4go.net 같은 곳에서 대국을 열어 SGF 텍스트를 통째로 복사해 붙여넣으세요.
-             형식 예: (;GM[1]SZ[19];B[pd];W[dp];B[pq]...)   ← B=흑, W=백, 대괄호 안은 좌표
+   - sgf    : (방법 A) 기보 파일(SGF)의 내용을 통째로 붙여넣기.
+              형식 예: (;GM[1]SZ[19];B[pd];W[dp];B[pq]...)   ← B=흑, W=백, 대괄호 안은 좌표
+   - sgfUrl : (방법 B ★자동) SGF '링크'만 넣으면 앱이 자동으로 가져옵니다.
+              긴 기보를 복사할 필요 없이 주소만 붙여넣으면 됩니다.
+              · 직접 .sgf 파일 링크         예) https://어딘가/game123.sgf
+              · OGS(online-go.com) 대국 링크 예) https://online-go.com/game/12345
+                → OGS 링크는 다운로드 주소로 알아서 변환해 가져옵니다.
+              (sgf 와 sgfUrl 중 하나만 있으면 됩니다. 둘 다 있으면 sgf를 씁니다.)
 
-   ▶ 새 대국을 추가하려면 { } 블록을 복사해 붙이고 label/match/sgf만 바꾸세요.
-   ▶ 기보를 직접 구하기 어렵거나 형식이 헷갈리면, Claude Code에게
-     "이 대국 기보를 GAMES에 추가해줘"라고 부탁하면 됩니다.
+   ▶ 새 대국을 추가하려면 { } 블록을 복사해 붙이고 값만 바꾸세요.
+   ▶ 화면 오른쪽 '기보 불러오기' 칸에 링크나 SGF를 붙여넣으면, 설정을 건드리지 않고도
+     즉석에서 기보를 열어볼 수 있습니다.
+   ▶ 기보를 직접 구하기 어려우면 Claude Code에게 "이 대국 기보를 추가해줘"라고 부탁하세요.
+
+   ※ 참고: '뉴스 제목만 보고 그 대국 기보를 자동으로 찾아오는' 것은 안정적으로 불가능합니다
+     (기사에 기보 링크가 없고, 프로 대국 기보 DB엔 공개 검색 API가 없음). 잘못 찾으면 엉뚱한
+     기보를 보여주게 되므로, 위처럼 '올바른 링크를 지정'하는 방식으로 자동화합니다.
    ------------------------------------------------------------------------- */
 const GAMES = [
   {
-    // 아래는 기능을 보여주기 위한 '예시 포석'입니다(실제 대국 아님).
-    // 실제 대국을 넣을 때는 label/match/sgf를 바꾸세요.
+    // (방법 A 데모) SGF를 직접 넣은 예시 포석 — 실제 대국은 아닙니다.
     label: "예시 포석 (데모 · 실제 대국 아님)",
     match: [],  // 예) ["신진서","카타고"] 로 바꾸면 관련 기사에 '기보 보기' 버튼이 붙습니다.
     sgf: "(;GM[1]FF[4]SZ[19];B[pd];W[dp];B[pq];W[dc];B[qk];W[nc];B[pf];W[pb];B[qc];W[kc];B[ce];W[cg];B[ee];W[fd];B[dd];W[ec];B[fe];W[gd];B[ci];W[cn];B[bp];W[cq];B[dl];W[gp])"
+  },
+  {
+    // (방법 B 데모) 링크만 넣으면 자동으로 가져옵니다 — OGS 공개 대국 예시(222수).
+    label: "URL 자동 불러오기 데모 (OGS 예시 대국)",
+    match: [],
+    sgfUrl: "https://online-go.com/game/1000000"
   },
 ];
 
@@ -516,14 +546,69 @@ function renderBoardSvg(size, board, lastMove){
   return s + `</svg>`;
 }
 
-/* '기보 보기'를 눌렀을 때: 해당 대국을 읽어 재생 창을 엽니다. */
-function openGame(gameIndex){
-  const game = GAMES[gameIndex];
-  const parsed = parseSgf(game.sgf);
+/* SGF 텍스트와 이름을 받아 재생 창을 엽니다. (모든 기보 열기의 공통 진입점) */
+function openSgf(sgfText, label){
+  const parsed = parseSgf(sgfText);
   // 처음엔 대국이 끝난 '최종 국면'을 보여줍니다. (이전 버튼으로 되감기 가능)
-  gamePlayer = { size: parsed.size, moves: parsed.moves, index: parsed.moves.length, label: game.label };
+  gamePlayer = { size: parsed.size, moves: parsed.moves, index: parsed.moves.length, label: label || "기보" };
   document.getElementById("game-modal").style.display = "flex";
   drawGame();
+}
+
+/* URL에서 SGF 텍스트를 자동으로 가져옵니다.
+   - OGS(online-go.com) 대국 링크는 SGF 다운로드 주소로 자동 변환합니다.
+   - 프록시(PROXIES)를 거쳐 가져오므로 CORS 문제 없이 동작합니다. */
+async function fetchSgfFromUrl(url){
+  // 예) https://online-go.com/game/12345  →  .../api/v1/games/12345/sgf
+  const ogs = url.match(/online-go\.com\/game\/(\d+)/);
+  const target = ogs ? `https://online-go.com/api/v1/games/${ogs[1]}/sgf` : url;
+  let lastErr;
+  for(const proxy of PROXIES){
+    try{
+      const res = await fetch(proxy + encodeURIComponent(target), { signal: AbortSignal.timeout(13000) });
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      // SGF다운 내용인지 최소 확인 (착수 기호나 GM 태그가 있어야 함)
+      if(text && (text.includes(";B[") || text.includes(";W[") || text.includes("GM[1]"))) return text;
+      throw new Error("SGF 형식이 아님");
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("불러오기 실패");
+}
+
+/* '기보 보기' / 기보 목록을 눌렀을 때: 해당 대국을 열어 재생합니다.
+   sgf가 있으면 바로 열고, sgfUrl만 있으면 자동으로 가져와서 엽니다. */
+async function openGame(gameIndex){
+  const game = GAMES[gameIndex];
+  if(game.sgf){ openSgf(game.sgf, game.label); return; }
+  if(game.sgfUrl){
+    openSgf("(;SZ[19])", game.label + " · 불러오는 중…");   // 빈 판 + 로딩 표시
+    try{
+      const sgf = await fetchSgfFromUrl(game.sgfUrl);
+      game.sgf = sgf;                 // 한 번 받아오면 저장해 두어 다음엔 즉시 열림
+      openSgf(sgf, game.label);
+    }catch(e){
+      closeGame();
+      alert("기보를 불러오지 못했습니다: " + e.message + "\n(링크가 올바른지, 잠시 뒤 다시 시도해 보세요.)");
+    }
+    return;
+  }
+  alert("이 대국에는 sgf 또는 sgfUrl이 없습니다.");
+}
+
+/* 오른쪽 '기보 불러오기' 칸: 붙여넣은 것이 링크면 자동으로 가져오고, SGF 내용이면 바로 엽니다. */
+async function importSgf(){
+  const input = document.getElementById("sgf-import");
+  const val = (input.value || "").trim();
+  if(!val){ return; }
+  // 괄호로 시작하거나 착수 기호가 있으면 'SGF 내용'으로 간주.
+  if(val.startsWith("(") || val.includes(";B[") || val.includes(";W[")){
+    openSgf(val, "붙여넣은 기보");
+  }else{
+    openSgf("(;SZ[19])", "불러오는 중…");
+    try{ openSgf(await fetchSgfFromUrl(val), "불러온 기보"); }
+    catch(e){ closeGame(); alert("불러오기 실패: " + e.message); }
+  }
 }
 
 /* 현재 상태(index수까지)를 바둑판에 다시 그립니다. */
